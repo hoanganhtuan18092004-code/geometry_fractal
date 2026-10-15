@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Xưởng Fractal L-system - Mandala biến hình</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f3f4f7; --text: #1d2230; --muted: #5b6475; --panel: #ffffff; --border: #d6dae3; --accent: #7c3aed;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #080b12; --text: #e7eaf2; --muted: #97a0b4; --panel: #121722; --border: #262d3d; --accent: #a78bfa;
+    }
+  }
+  :root[data-theme="dark"] { --bg: #080b12; --text: #e7eaf2; --muted: #97a0b4; --panel: #121722; --border: #262d3d; --accent: #a78bfa; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh; padding: 18px 14px 30px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  header { text-align: center; max-width: 760px; }
+  h1 { font-size: 1.2rem; font-weight: 700; }
+  .sub { color: var(--muted); font-size: .85rem; line-height: 1.5; margin-top: 4px; }
+  main { width: 100%; max-width: 1100px; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 14px; align-items: start; }
+  #stage { position: relative; background: #05070d; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; aspect-ratio: 1 / 1; }
+  canvas { width: 100%; height: 100%; display: block; }
+  #status { position: absolute; left: 10px; bottom: 8px; font-size: .75rem; color: #aab3c8; background: rgba(5,7,13,.7);
+    padding: 4px 9px; border-radius: 6px; pointer-events: none; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; margin-bottom: 8px; }
+  .chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .chip { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px;
+    font-size: .8rem; cursor: pointer; text-align: left; }
+  .chip:hover { border-color: var(--accent); }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  label.row { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted); margin-bottom: 4px; gap: 8px; }
+  label.row b { color: var(--text); font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; margin-bottom: 10px; }
+  select { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; font-size: .85rem; }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  .check { display: flex; align-items: center; gap: 7px; font-size: .82rem; cursor: pointer; }
+  .check input { accent-color: var(--accent); }
+  .btns { display: flex; gap: 8px; }
+  .btn { flex: 1; background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; font-size: .85rem; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Xưởng fractal L-system</h1>
+  <p class="sub">Từ đường cong Gosper, biến tấu thành mandala nhiều cánh, đổi sang các fractal khác bằng hiệu ứng biến hình, bẻ góc rẽ để uốn thành xoắn ốc và đổi bảng màu phát sáng.</p>
+</header>
+
+<main>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="status"></div>
+  </div>
+
+  <div class="panel">
+    <section>
+      <h2>Hình dạng</h2>
+      <div class="chips" id="chips"></div>
+    </section>
+
+    <section>
+      <h2>Cấu trúc</h2>
+      <label class="row"><span>Lần lặp</span><b id="v-iter"></b></label>
+      <input type="range" id="s-iter" min="0" max="5" step="1" value="3">
+      <label class="row"><span>Số cánh đối xứng</span><b id="v-folds"></b></label>
+      <input type="range" id="s-folds" min="1" max="12" step="1" value="6">
+      <label class="row"><span>Dịch tâm hình ra xa gốc</span><b id="v-offset"></b></label>
+      <input type="range" id="s-offset" min="0" max="1.4" step="0.02" value="0.55">
+      <label class="row"><span>Bẻ góc rẽ (độ)</span><b id="v-delta"></b></label>
+      <input type="range" id="s-delta" min="-20" max="20" step="0.5" value="0">
+    </section>
+
+    <section>
+      <h2>Màu sắc và nét vẽ</h2>
+      <select id="palette" aria-label="Bảng màu"></select>
+      <div style="height:10px"></div>
+      <label class="row"><span>Độ dày nét</span><b id="v-width"></b></label>
+      <input type="range" id="s-width" min="0.5" max="4" step="0.1" value="1.4">
+      <label class="row"><span>Tốc độ xoay (độ/giây)</span><b id="v-spin"></b></label>
+      <input type="range" id="s-spin" min="0" max="40" step="1" value="8">
+      <div class="checks">
+        <label class="check"><input type="checkbox" id="c-glow" checked> Phát sáng</label>
+        <label class="check"><input type="checkbox" id="c-mirror"> Soi gương</label>
+        <label class="check"><input type="checkbox" id="c-shift" checked> Lệch màu mỗi cánh</label>
+        <label class="check"><input type="checkbox" id="c-cycle" checked> Màu chuyển động</label>
+        <label class="check"><input type="checkbox" id="c-auto" checked> Tự chạy lần lặp</label>
+      </div>
+    </section>
+
+    <div class="btns">
+      <button class="btn primary" id="btn-random">🎲 Biến tấu ngẫu nhiên</button>
+      <button class="btn" id="btn-reset">↺ Mặc định</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  // ---------- Các hình L-system ----------
+  const SHAPES = [
+    { id: 'gosper', name: 'Gosper (hoa lục giác)', axiom: 'A', angle: 60, draw: 'AB',
+      rules: { A: 'A-B--B+A++AA+B-', B: '+A-BB--B-A++A+B' }, max: 5, def: 3 },
+    { id: 'koch', name: 'Bông tuyết Koch', axiom: 'F++F++F', angle: 60, draw: 'F',
+      rules: { F: 'F-F++F-F' }, max: 6, def: 4 },
+    { id: 'arrow', name: 'Mũi tên Sierpinski', axiom: 'A', angle: 60, draw: 'AB',
+      rules: { A: 'B-A-B', B: 'A+B+A' }, max: 8, def: 5 },
+    { id: 'sierp', name: 'Tam giác Sierpinski', axiom: 'F-G-G', angle: 120, draw: 'FG',
+      rules: { F: 'F-G+F+G-F', G: 'GG' }, max: 7, def: 4 },
+    { id: 'dragon', name: 'Rồng Heighway', axiom: 'FX', angle: 90, draw: 'F',
+      rules: { X: 'X+YF+', Y: '-FX-Y' }, max: 14, def: 10 },
+    { id: 'hilbert', name: 'Đường cong Hilbert', axiom: 'A', angle: 90, draw: 'F',
+      rules: { A: '+BF-AFA-FB+', B: '-AF+BFB+FA-' }, max: 7, def: 5 },
+    { id: 'terdragon', name: 'Rồng ba (Terdragon)', axiom: 'F', angle: 120, draw: 'F',
+      rules: { F: 'F+F-F' }, max: 8, def: 6 },
+    { id: 'levy', name: 'Lévy C', axiom: 'F', angle: 45, draw: 'F',
+      rules: { F: '+F--F+' }, max: 14, def: 10 },
+    { id: 'quad', name: 'Đảo Koch vuông', axiom: 'F+F+F+F', angle: 90, draw: 'F',
+      rules: { F: 'F+F-F-FF+F+F-F' }, max: 4, def: 3 }
+  ];
+
+  const PALETTES = {
+    neon:   { name: 'Neon hồng - tím - lam', stops: ['#ff3d81', '#a855f7', '#22d3ee', '#34d399'] },
+    manim:  { name: 'Manim (vàng → lục)',    stops: ['#F4D345', '#83C167'] },
+    rainbow:{ name: 'Cầu vồng',              stops: ['#ff3b3b', '#ffd23b', '#4be36b', '#34d5ff', '#6a5cff', '#ff4fd8'] },
+    fire:   { name: 'Lửa',                   stops: ['#7f1d1d', '#f43f5e', '#fb923c', '#fde047'] },
+    ice:    { name: 'Băng giá',              stops: ['#0ea5e9', '#22d3ee', '#e0f2fe', '#a78bfa'] },
+    sunset: { name: 'Hoàng hôn',             stops: ['#4c1d95', '#c026d3', '#f472b6', '#fdba74'] },
+    gold:   { name: 'Vàng kim',              stops: ['#fff3b0', '#f59e0b', '#b45309'] }
+  };
+  for (const k in PALETTES) {
+    PALETTES[k].rgb = PALETTES[k].stops.map(h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+  }
+
+  // ---------- Trạng thái ----------
+  const DEFAULTS = { shape: 'gosper', iter: 3, folds: 6, offset: 0.55, delta: 0, width: 1.4, spin: 8,
+    palette: 'neon', glow: true, mirror: false, shift: true, cycle: true, auto: true };
+  const S = Object.assign({}, DEFAULTS);
+  const $ = id => document.getElementById(id);
+  const shapeById = id => SHAPES.find(s => s.id === id);
+
+  // ---------- Sinh chuỗi L-system và đường gấp khúc ----------
+  const strCache = {};
+  function lstring(shape, n) {
+    const arr = strCache[shape.id] || (strCache[shape.id] = [shape.axiom]);
+    while (arr.length <= n) {
+      const prev = arr[arr.length - 1], out = [];
+      for (let i = 0; i < prev.length; i++) { const r = shape.rules[prev[i]]; out.push(r !== undefined ? r : prev[i]); }
+      arr.push(out.join(''));
+    }
+    return arr[n];
+  }
+
+  const ptsCache = new Map();
+  function buildPts(shape, n, delta) {
+    const key = shape.id + '|' + n + '|' + delta.toFixed(1);
+    if (ptsCache.has(key)) return ptsCache.get(key);
+    const str = lstring(shape, n);
+    const ang = (shape.angle + delta) * Math.PI / 180;
+    let count = 1;
+    for (let i = 0; i < str.length; i++) if (shape.draw.indexOf(str[i]) >= 0) count++;
+    const pts = new Float32Array(count * 2);
+    let x = 0, y = 0, a = 0, k = 1;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (shape.draw.indexOf(ch) >= 0) {
+        x += Math.cos(a); y += Math.sin(a);
+        pts[2 * k] = x; pts[2 * k + 1] = y; k++;
+      } else if (ch === '+') a += ang;
+      else if (ch === '-') a -= ang;
+    }
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < count; i++) {
+      const px = pts[2 * i], py = pts[2 * i + 1];
+      if (px < minX) minX = px; if (px > maxX) maxX = px;
+      if (py < minY) minY = py; if (py > maxY) maxY = py;
+    }
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    const half = Math.max((maxX - minX) / 2, (maxY - minY) / 2) || 1;
+    for (let i = 0; i < count; i++) { pts[2 * i] = (pts[2 * i] - cx) / half; pts[2 * i + 1] = (pts[2 * i + 1] - cy) / half; }
+    if (ptsCache.size > 60) ptsCache.clear();
+    ptsCache.set(key, pts);
+    return pts;
+  }
+
+  function resample(pts, m) {
+    const n = pts.length / 2;
+    const out = new Float32Array(m * 2);
+    for (let j = 0; j < m; j++) {
+      const u = m === 1 ? 0 : j * (n - 1) / (m - 1);
+      const i0 = Math.min(Math.floor(u), n - 2), f = u - i0, i1 = i0 + 1;
+      out[2 * j]     = pts[2 * i0]     + (pts[2 * i1]     - pts[2 * i0])     * f;
+      out[2 * j + 1] = pts[2 * i0 + 1] + (pts[2 * i1 + 1] - pts[2 * i0 + 1]) * f;
+    }
+    return out;
+  }
+
+  function smooth(t) {
+    const sig = x => 1 / (1 + Math.exp(-x));
+    return Math.min(1, Math.max(0, (sig(10 * (t - 0.5)) - sig(-5)) / (sig(5) - sig(-5))));
+  }
+
+  // ---------- Biến hình giữa hai đường cong ----------
+  let disp = null;          // đường đang hiển thị (khi không biến hình)
+  let trans = null;         // {A, B, final, t0, dur}
+  let scratch = new Float32Array(4);
+  let dirty = true;
+
+  function currentPts(now) {
+    if (!trans) return disp;
+    const u = Math.min(1, (now - trans.t0) / trans.dur);
+    if (u >= 1) { disp = trans.final; trans = null; return disp; }
+    const k = smooth(u), A = trans.A, B = trans.B;
+    if (scratch.length !== A.length) scratch = new Float32Array(A.length);
+    for (let i = 0; i < A.length; i++) scratch[i] = A[i] + (B[i] - A[i]) * k;
+    return scratch;
+  }
+
+  function setTarget(B, dur) {
+    const now = performance.now();
+    if (!disp || dur <= 0) { disp = B; trans = null; dirty = true; return; }
+    const cur = currentPts(now);
+    const m = Math.max(cur.length, B.length) / 2;
+    const A = resample(cur, m).slice();       // sao chép vì cur có thể là bộ đệm scratch
+    trans = { A, B: resample(B, m), final: B, t0: now, dur: dur * 1000 };
+    dirty = true;
+  }
+
+  function applyGeometry(dur) {
+    const shape = shapeById(S.shape);
+    setTarget(buildPts(shape, S.iter, S.delta), dur);
+    updateLabels();
+  }
+
+  // ---------- Màu ----------
+  function colorAt(t, copy, copies, phase) {
+    const pal = PALETTES[S.palette].rgb;
+    let p = t;
+    if (S.shift && copies > 1) p += copy / copies;
+    p += phase;
+    if (S.shift || S.cycle) {         // dạng sóng tam giác để màu liền mạch khi cuộn
+      p = p - Math.floor(p);
+      p = p < 0.5 ? p * 2 : (1 - p) * 2;
+    } else p = Math.min(1, Math.max(0, p));
+    const sc = p * (pal.length - 1);
+    const i = Math.min(Math.floor(sc), pal.length - 2), f = sc - i;
+    const a = pal[i], b = pal[i + 1];
+    return 'rgb(' + ((a[0] + (b[0] - a[0]) * f) | 0) + ',' + ((a[1] + (b[1] - a[1]) * f) | 0) + ',' + ((a[2] + (b[2] - a[2]) * f) | 0) + ')';
+  }
+
+  // ---------- Vẽ ----------
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  let W = 1, H = 1, dpr = 1;
+  function resize() {
+    const r = cv.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(1, Math.round(r.width * dpr)); H = Math.max(1, Math.round(r.height * dpr));
+    cv.width = W; cv.height = H;
+    dirty = true;
+  }
+
+  function render(pts, tSec) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#05070d';
+    ctx.fillRect(0, 0, W, H);
+    if (!pts) return;
+
+    if (pts.length / 2 < 90) pts = resample(pts, 90);       // đoạn ít điểm: chia nhỏ để dải màu mượt
+    const m = pts.length / 2;
+    const folds = S.folds;
+    const copies = folds * (S.mirror ? 2 : 1);
+    const stride = Math.max(1, Math.ceil((m - 1) * copies / 240000));
+    const chunkCount = Math.max(1, Math.min(80, Math.floor((m - 1) / stride)));
+    const ppc = (m - 1) / chunkCount;
+
+    const paths = [];
+    for (let c = 0; c < chunkCount; c++) {
+      const i0 = Math.floor(c * ppc), i1 = c === chunkCount - 1 ? m - 1 : Math.floor((c + 1) * ppc);
+      const p = new Path2D();
+      p.moveTo(pts[2 * i0], pts[2 * i0 + 1]);
+      for (let i = i0 + stride; i < i1; i += stride) p.lineTo(pts[2 * i], pts[2 * i + 1]);
+      p.lineTo(pts[2 * i1], pts[2 * i1 + 1]);
+      paths.push(p);
+    }
+
+    const ox = folds > 1 ? S.offset : 0;
+    const R = ox + 1.18;
+    const s = Math.min(W, H) / 2 * 0.94 / R;
+    const spin = tSec * S.spin * Math.PI / 180;
+    const phase = S.cycle ? tSec * 0.08 : 0;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (S.glow) ctx.globalCompositeOperation = 'lighter';
+
+    const passes = S.glow ? [{ w: 3.2, a: 0.10 }, { w: 1, a: 0.85 }] : [{ w: 1, a: 1 }];
+    for (const pass of passes) {
+      ctx.globalAlpha = pass.a;
+      ctx.lineWidth = S.width * pass.w * dpr / s;
+      for (let k = 0; k < copies; k++) {
+        const copy = S.mirror ? k >> 1 : k;
+        const mir = S.mirror && (k & 1);
+        ctx.setTransform(s, 0, 0, -s, W / 2, H / 2);
+        ctx.rotate(spin + copy * 2 * Math.PI / folds);
+        if (mir) ctx.scale(1, -1);
+        ctx.translate(ox, 0);
+        for (let c = 0; c < chunkCount; c++) {
+          ctx.strokeStyle = colorAt((c + 0.5) / chunkCount, k, copies, phase);
+          ctx.stroke(paths[c]);
+        }
+      }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    $('status').textContent = shapeById(S.shape).name + ' · lần lặp ' + S.iter + ' · ' + (m - 1).toLocaleString() + ' đoạn × ' + copies + ' bản';
+  }
+
+  // ---------- Giao diện ----------
+  function updateLabels() {
+    const shape = shapeById(S.shape);
+    const sl = $('s-iter');
+    sl.max = shape.max;
+    sl.value = S.iter;
+    $('v-iter').textContent = S.iter + ' / ' + shape.max;
+    $('v-folds').textContent = S.folds;
+    $('v-offset').textContent = S.offset.toFixed(2);
+    $('v-delta').textContent = (S.delta > 0 ? '+' : '') + S.delta.toFixed(1) + '°';
+    $('v-width').textContent = S.width.toFixed(1);
+    $('v-spin').textContent = S.spin;
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.id === S.shape));
+  }
+
+  function syncControls() {
+    $('s-folds').value = S.folds; $('s-offset').value = S.offset; $('s-delta').value = S.delta;
+    $('s-width').value = S.width; $('s-spin').value = S.spin; $('palette').value = S.palette;
+    $('c-glow').checked = S.glow; $('c-mirror').checked = S.mirror; $('c-shift').checked = S.shift;
+    $('c-cycle').checked = S.cycle; $('c-auto').checked = S.auto;
+    updateLabels();
+  }
+
+  // chips
+  const chips = $('chips');
+  SHAPES.forEach(sh => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.dataset.id = sh.id; b.textContent = sh.name;
+    b.addEventListener('click', () => {
+      S.shape = sh.id; S.iter = Math.min(sh.def, sh.max);
+      applyGeometry(1.2); resetAuto();
+    });
+    chips.appendChild(b);
+  });
+  // palette
+  for (const k in PALETTES) {
+    const o = document.createElement('option'); o.value = k; o.textContent = PALETTES[k].name; $('palette').appendChild(o);
+  }
+
+  let geomPending = false;
+  function scheduleGeom() {
+    if (geomPending) return;
+    geomPending = true;
+    requestAnimationFrame(() => { geomPending = false; applyGeometry(0); });
+  }
+  function bindRange(id, key, parse, geometry) {
+    $(id).addEventListener('input', e => {
+      S[key] = parse(e.target.value);
+      if (geometry === 'anim') { applyGeometry(0.9); resetAuto(); }
+      else if (geometry === 'now') scheduleGeom();
+      else { dirty = true; }
+      updateLabels();
+    });
+  }
+  bindRange('s-iter', 'iter', v => parseInt(v, 10), 'anim');
+  bindRange('s-delta', 'delta', parseFloat, 'now');
+  bindRange('s-folds', 'folds', v => parseInt(v, 10));
+  bindRange('s-offset', 'offset', parseFloat);
+  bindRange('s-width', 'width', parseFloat);
+  bindRange('s-spin', 'spin', v => parseInt(v, 10));
+  $('palette').addEventListener('change', e => { S.palette = e.target.value; dirty = true; });
+  [['c-glow', 'glow'], ['c-mirror', 'mirror'], ['c-shift', 'shift'], ['c-cycle', 'cycle'], ['c-auto', 'auto']].forEach(([id, key]) => {
+    $(id).addEventListener('change', e => { S[key] = e.target.checked; dirty = true; if (key === 'auto') resetAuto(); });
+  });
+
+  $('btn-reset').addEventListener('click', () => {
+    Object.assign(S, DEFAULTS); syncControls(); applyGeometry(1.2); resetAuto();
+  });
+  $('btn-random').addEventListener('click', () => {
+    const sh = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    S.shape = sh.id;
+    S.iter = Math.max(1, Math.min(sh.max, sh.def + Math.floor(Math.random() * 3) - 1));
+    S.folds = 1 + Math.floor(Math.random() * 12);
+    S.offset = 0.2 + Math.random() * 0.9;
+    S.delta = Math.random() < 0.55 ? 0 : Math.round((Math.random() * 24 - 12) * 2) / 2;
+    S.mirror = Math.random() < 0.4;
+    S.shift = Math.random() < 0.7;
+    const keys = Object.keys(PALETTES); S.palette = keys[Math.floor(Math.random() * keys.length)];
+    syncControls(); applyGeometry(1.2); resetAuto();
+  });
+
+  // ---------- Tự chạy qua các lần lặp ----------
+  let nextAt = 0;
+  function resetAuto() { nextAt = performance.now() + 2200; }
+  function stepAuto(now) {
+    const shape = shapeById(S.shape);
+    S.iter = S.iter < shape.max ? S.iter + 1 : 0;
+    applyGeometry(0.9);
+    nextAt = now + 900 + (S.iter === shape.max ? 2400 : 700);
+  }
+
+  // ---------- Vòng lặp ----------
+  const t0 = performance.now();
+  function frame(now) {
+    if (S.auto && !trans && now >= nextAt) stepAuto(now);
+    const animating = trans || S.spin > 0 || S.cycle;
+    if (dirty || animating) {
+      const pts = currentPts(now);
+      render(pts, (now - t0) / 1000);
+      dirty = false;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  new ResizeObserver(resize).observe(cv);
+  resize();
+  syncControls();
+  applyGeometry(0);
+  resetAuto();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
